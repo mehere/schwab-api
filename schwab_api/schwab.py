@@ -7,6 +7,7 @@ from . import urls
 from .account_information import Position, Account
 from .authentication import SessionManager
 
+
 class Schwab(SessionManager):
     def __init__(self, session_cache=None, **kwargs):
         """
@@ -83,10 +84,12 @@ class Schwab(SessionManager):
 
         return account_info
 
-    def get_transaction_history_v2(self, account_id):
+    def get_transaction_history_v2(self, account_id, from_date="", to_date=""):
         """
             account_id (int) - The account ID to place the trade on. If the ID is XXXX-XXXX,
                         we're looking for just XXXXXXXX.
+            from_date (yyyy-mm-dd) - the date the transaction history starts from. Leave it empty to search for all.
+            to_date (yyyy-mm-dd) - the date the transaction history ends with. Leave it empty to search for all.
 
             Returns a dictionary of transaction history entries for the provided account ID.
         """
@@ -116,6 +119,11 @@ class Schwab(SessionManager):
             "sortColumn": "Date",
             "sortDirection": "Descending"
         }
+        if len(from_date) > 0 and len(to_date) > 0:
+            data["timeFrame"] = "SpecifyDateRange"
+            data["fromDate"] = from_date
+            data["toDate"] = to_date
+
         r = requests.post(urls.transaction_history_v2(), json=data, headers=self.headers)
         if r.status_code != 200:
             return [r.text], False
@@ -140,18 +148,18 @@ class Schwab(SessionManager):
             raise Exception("side must be either Buy or Sell")
 
         data = {
-            "IsMinQty":False,
-            "CustomerId":str(account_id),
-            "BuySellCode":buySellCode,
-            "Quantity":str(qty),
-            "IsReinvestDividends":False,
-            "SecurityId":ticker,
-            "TimeInForce":"1", # Day Only
-            "OrderType":1, # Market Order
-            "CblMethod":"FIFO",
-            "CblDefault":"FIFO",
-            "CostBasis":"FIFO",
-            }
+            "IsMinQty": False,
+            "CustomerId": str(account_id),
+            "BuySellCode": buySellCode,
+            "Quantity": str(qty),
+            "IsReinvestDividends": False,
+            "SecurityId": ticker,
+            "TimeInForce": "1",  # Day Only
+            "OrderType": 1,  # Market Order
+            "CblMethod": "FIFO",
+            "CblDefault": "FIFO",
+            "CostBasis": "FIFO",
+        }
 
         r = self.session.post(urls.order_verification(), data)
 
@@ -199,21 +207,21 @@ class Schwab(SessionManager):
         return messages, False
 
     def trade_v2(self,
-        ticker,
-        side,
-        qty,
-        account_id,
-        dry_run=True,
-        # The Fields below are experimental fields that should only be changed if you know what you're doing.
-        order_type=49,
-        duration=48,
-        limit_price=0,
-        stop_price=0,
-        primary_security_type=46,
-        valid_return_codes = {0,10},
-        affirm_order=False,
-        costBasis='FIFO'
-        ):
+                 ticker,
+                 side,
+                 qty,
+                 account_id,
+                 dry_run=True,
+                 # The Fields below are experimental fields that should only be changed if you know what you're doing.
+                 order_type=49,
+                 duration=48,
+                 limit_price=0,
+                 stop_price=0,
+                 primary_security_type=46,
+                 valid_return_codes={0, 10},
+                 affirm_order=False,
+                 costBasis='FIFO'
+                 ):
         """
             ticker (Str) - The symbol you want to trade,
             side (str) - Either 'Buy' or 'Sell',
@@ -297,44 +305,44 @@ class Schwab(SessionManager):
         # Max 2 decimal places allowed for price >= $1 and 4 decimal places for price < $1.
         if limit_price >= 1:
             if decimal_places > 2:
-                limit_price = round(limit_price,2)
+                limit_price = round(limit_price, 2)
                 limit_price_warning = f"For limit_price >= 1, Only 2 decimal places allowed. Rounded price_limit to: {limit_price}"
         else:
             if decimal_places > 4:
-                limit_price = round(limit_price,4)
+                limit_price = round(limit_price, 4)
                 limit_price_warning = f"For limit_price < 1, Only 4 decimal places allowed. Rounded price_limit to: {limit_price}"
 
         self.update_token(token_type='update')
 
         data = {
             "UserContext": {
-                "AccountId":str(account_id),
-                "AccountColor":0
+                "AccountId": str(account_id),
+                "AccountColor": 0
             },
             "OrderStrategy": {
-                "PrimarySecurityType":primary_security_type,
+                "PrimarySecurityType": primary_security_type,
                 "CostBasisRequest": {
-                    "costBasisMethod":costBasis,
-                    "defaultCostBasisMethod":costBasis
+                    "costBasisMethod": costBasis,
+                    "defaultCostBasisMethod": costBasis
                 },
-                "OrderType":str(order_type),
-                "LimitPrice":str(limit_price),
-                "StopPrice":str(stop_price),
-                "Duration":str(duration),
-                "AllNoneIn":False,
-                "DoNotReduceIn":False,
-                "OrderStrategyType":1,
-                "OrderLegs":[
+                "OrderType": str(order_type),
+                "LimitPrice": str(limit_price),
+                "StopPrice": str(stop_price),
+                "Duration": str(duration),
+                "AllNoneIn": False,
+                "DoNotReduceIn": False,
+                "OrderStrategyType": 1,
+                "OrderLegs": [
                     {
-                        "Quantity":str(qty),
-                        "LeavesQuantity":str(qty),
-                        "Instrument":{"Symbol":ticker},
-                        "SecurityType":primary_security_type,
-                        "Instruction":buySellCode
+                        "Quantity": str(qty),
+                        "LeavesQuantity": str(qty),
+                        "Instrument": {"Symbol": ticker},
+                        "SecurityType": primary_security_type,
+                        "Instruction": buySellCode
                     }
-                    ]},
+                ]},
             # OrderProcessingControl seems to map to verification vs actually placing an order.
-            "OrderProcessingControl":1
+            "OrderProcessingControl": 1
         }
 
         # Adding this header seems to be necessary.
@@ -390,21 +398,20 @@ class Schwab(SessionManager):
 
         return messages, False
 
-
     def option_trade_v2(self,
-        strategy,
-        symbols,
-        instructions,
-        quantities,
-        account_id,
-        order_type,
-        dry_run=True,
-        duration=48,
-        limit_price=0,
-        stop_price=0,
-        valid_return_codes = {0,10},
-        affirm_order=False
-        ):
+                        strategy,
+                        symbols,
+                        instructions,
+                        quantities,
+                        account_id,
+                        order_type,
+                        dry_run=True,
+                        duration=48,
+                        limit_price=0,
+                        stop_price=0,
+                        valid_return_codes={0, 10},
+                        affirm_order=False
+                        ):
         """
             Disclaimer:
             Use at own risk.
@@ -500,11 +507,11 @@ class Schwab(SessionManager):
         self.update_token(token_type='update')
 
         data = {
-              "UserContext": {
+            "UserContext": {
                 "AccountId": str(account_id),
                 "AccountColor": 0
-              },
-              "OrderStrategy": {
+            },
+            "OrderStrategy": {
                 "PrimarySecurityType": 48,
                 "CostBasisRequest": None,
                 "OrderType": str(order_type),
@@ -525,7 +532,7 @@ class Schwab(SessionManager):
                         "SecurityType": 48,
                         "Instruction": instruction
                     } for qty, symbol, instruction in zip(quantities, symbols, instruction_codes)
-                    ]},
+                ]},
             # OrderProcessingControl seems to map to verification vs actually placing an order.
             "OrderProcessingControl": 1
         }
@@ -585,8 +592,8 @@ class Schwab(SessionManager):
             # The fields below are experimental and should only be changed if you know what
             # you're doing.
             instrument_type=46,
-            order_management_system=2, # You may need to change this based on the value returned from calling orders_v2
-            ):
+            order_management_system=2,  # You may need to change this based on the value returned from calling orders_v2
+    ):
         """
         Cancels an open order (specified by order ID) using the v2 API
 
@@ -605,12 +612,12 @@ class Schwab(SessionManager):
                 "IsLiveOrder": True,
                 "InstrumentType": instrument_type,
                 "CancelOrderLegs": [{}],
-                }],
+            }],
             "ContingentIdToCancel": 0,
             "OrderIdToCancel": 0,
             "OrderProcessingControl": 1,
             "ConfirmCancelOrderId": 0,
-            }
+        }
         self.headers["schwab-client-account"] = account_id
         self.headers["schwab-resource-version"] = '2.0'
         # Web interface uses bearer token retrieved from:
@@ -649,9 +656,9 @@ class Schwab(SessionManager):
         quote_v2 takes a list of Tickers, and returns Quote information through the Schwab API.
         """
         data = {
-            "Symbols":tickers,
-            "IsIra":False,
-            "AccountRegType":"S3"
+            "Symbols": tickers,
+            "IsIra": False,
+            "AccountRegType": "S3"
         }
 
         # Adding this header seems to be necessary.
@@ -703,7 +710,8 @@ class Schwab(SessionManager):
                             position["symbolDetail"]["symbol"],
                             position["symbolDetail"]["description"],
                             float(position["quantity"]),
-                            0 if "costDetail" not in position else float(position["costDetail"]["costBasisDetail"]["costBasis"]),
+                            0 if "costDetail" not in position else float(
+                                position["costDetail"]["costBasisDetail"]["costBasis"]),
                             0 if "priceDetail" not in position else float(position["priceDetail"]["marketValue"]),
                             position["symbolDetail"]["schwabSecurityId"]
                         )._as_dict()
@@ -767,7 +775,7 @@ class Schwab(SessionManager):
         is_success = r.status_code in [200, 207]
         return is_success, (is_success and json.loads(r.text) or r.text)
 
-    def get_options_chains_v2(self, ticker, greeks = False):
+    def get_options_chains_v2(self, ticker, greeks=False):
         """
              Please do not abuse this API call. It is pulling all the option chains for a ticker.
              It's not reverse engineered to the point where you can narrow it down to a range of strike prices and expiration dates.
@@ -777,11 +785,11 @@ class Schwab(SessionManager):
              greeks (bool) - if greeks is true, you will also get the option greeks (Delta, Theta, Gamma etc... )
         """
         data = {
-            "Symbol":ticker,
+            "Symbol": ticker,
             "IncludeGreeks": "true" if greeks else "false"
         }
 
-        full_url= urllib.parse.urljoin(urls.option_chains_v2(), '?' + urllib.parse.urlencode(data))
+        full_url = urllib.parse.urljoin(urls.option_chains_v2(), '?' + urllib.parse.urlencode(data))
 
         # Adding this header seems to be necessary.
         self.headers['schwab-resource-version'] = '1.0'
